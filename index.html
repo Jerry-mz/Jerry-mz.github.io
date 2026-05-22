@@ -3,175 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>车机 JSBridge 健壮性测试工具</title>
+    <title>图片显示测试页面</title>
     <style>
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            padding: 20px; 
-            background: #f4f5f7; 
-            color: #333; 
-            text-align: center; 
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #333;
         }
-        .card { 
-            background: white; 
-            padding: 25px; 
-            border-radius: 16px; 
-            box-shadow: 0 4px 16px rgba(0,0,0,0.08); 
-            margin: 20px auto; 
-            max-width: 500px; 
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
         }
-        .info-box {
-            background: #e6f7ff;
-            border: 1px solid #91d5ff;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 14px;
-            text-align: left;
+        .container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
-        button { 
-            width: 90%; 
-            padding: 14px; 
-            margin: 10px 0; 
-            border: none; 
-            border-radius: 10px; 
-            font-size: 16px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: transform 0.1s, background 0.2s; 
+        .image-card {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            text-align: center;
         }
-        button:active {
-            transform: scale(0.98);
+        .image-card h2 {
+            font-size: 16px;
+            color: #666;
+            margin-top: 0;
+            margin-bottom: 10px;
         }
-        .btn-danger { background: #ff4d4f; color: white; }
-        .btn-danger:hover { background: #ff7875; }
-        .btn-warning { background: #faad14; color: white; }
-        .btn-warning:hover { background: #ffc069; }
-        .btn-success { background: #52c41a; color: white; }
-        .btn-success:hover { background: #73d13d; }
-        
-        #log { 
-            margin: 20px auto; 
-            max-width: 500px; 
-            background: #1e1e1e; 
-            color: #7cfc00; 
-            padding: 15px; 
-            border-radius: 10px; 
-            text-align: left; 
-            font-family: monospace; 
-            font-size: 13px; 
-            height: 200px; 
-            overflow-y: auto; 
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            border: 1px solid #eee;
+            background-color: #eaeaea; /* 图片加载前或加载失败时的占位背景 */
         }
     </style>
 </head>
 <body>
 
-    <h2>🚗 车机系统界面接口压测</h2>
-    <p style="color: #666; font-size: 14px;">安全提示：请在车辆静止挂 P 档时进行测试</p>
+    <h1>WebP 图片渲染测试</h1>
 
-    <div class="card">
-        <div class="info-box" id="env-status">
-            🔍 正在检测车机环境...
+    <div class="container">
+        <!-- 第一张图片卡片 -->
+        <div class="image-card">
+            <h2>图片文件名: bad.webp</h2>
+            <img src="bad.webp" alt="无法加载 bad.webp，请检查文件是否存在">
         </div>
-        
-        <button class="btn-danger" onclick="startTest('adjust')">💥 狂刷 adjustWebviewSize</button>
-        <button class="btn-warning" onclick="startTest('relayout')">⚡ 狂刷 relayoutHappen</button>
-        <button class="btn-success" onclick="stopTest()">🛑 立即停止压测</button>
+
+        <!-- 第二张图片卡片 -->
+        <div class="image-card">
+            <h2>图片文件名: nso.webp</h2>
+            <img src="nso.webp" alt="无法加载 nso.webp，请检查文件是否存在">
+        </div>
     </div>
 
-    <div id="log">等待指令...</div>
-
-    <script>
-        let intervalId = null;
-        let callCount = 0;
-        const logArea = document.getElementById('log');
-        const statusBox = document.getElementById('env-status');
-
-        // 打印日志到屏幕
-        function printLog(msg) {
-            logArea.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-            logArea.scrollTop = logArea.scrollHeight;
-        }
-
-        // 页面加载时自动校验接口是否存在
-        window.onload = function() {
-            if (typeof window.HwWebViewJSI !== 'undefined') {
-                statusBox.style.background = '#f6ffed';
-                statusBox.style.borderColor = '#b7eb8f';
-                statusBox.style.color = '#389e0d';
-                statusBox.innerHTML = `<b>✅ 环境检测成功！</b><br>已成功识别到 <code>window.HwWebViewJSI</code> 对象。`;
-                printLog("✅ 车机原生注入接口识别成功，随时可以开始测试。");
-            } else {
-                statusBox.style.background = '#fff2f0';
-                statusBox.style.borderColor = '#ffccc7';
-                statusBox.style.color = '#cf1322';
-                statusBox.innerHTML = `<b>❌ 未检测到车机接口</b><br>请检查打开网页的入口是否正确，或当前域名未获得授权。`;
-                printLog("❌ 错误：当前环境未检测到 window.HwWebViewJSI 对象。");
-            }
-        }
-
-        // 启动压力测试
-        function startTest(type) {
-            if (intervalId) {
-                printLog("⚠️ 测试已在运行中，请先停止当前测试。");
-                return;
-            }
-
-            if (typeof window.HwWebViewJSI === 'undefined') {
-                printLog("❌ 无法启动：未检测到合法的 window.HwWebViewJSI 对象！");
-                return;
-            }
-
-            callCount = 0;
-            printLog(`🚀 启动 [${type === 'adjust' ? 'adjustWebviewSize' : 'relayoutHappen'}] 超高频压力测试...`);
-
-            // 1毫秒间隔超高频循环调用
-            intervalId = setInterval(() => {
-                try {
-                    if (type === 'adjust') {
-                        if (typeof window.HwWebViewJSI.adjustWebviewSize === 'function') {
-                            // 交替变换输入尺寸，强迫底层布局引擎不断重算
-                            let mockWidth = callCount % 2 === 0 ? 100 : 1920;
-                            let mockHeight = callCount % 2 === 0 ? 100 : 1080;
-                            
-                            window.HwWebViewJSI.adjustWebviewSize(mockWidth, mockHeight);
-                        } else {
-                            printLog("❌ .adjustWebviewSize 不是一个可调用的函数");
-                            stopTest();
-                        }
-                    } 
-                    else if (type === 'relayout') {
-                        if (typeof window.HwWebViewJSI.relayoutHappen === 'function') {
-                            window.HwWebViewJSI.relayoutHappen();
-                        } else {
-                            printLog("❌ .relayoutHappen 不是一个可调用的函数");
-                            stopTest();
-                        }
-                    }
-
-                    callCount++;
-                    // 每 500 次调用在屏幕打印一次进度，防止频繁更新 DOM 导致网页自己卡死
-                    if (callCount % 500 === 0) {
-                        printLog(`🔥 已向车机底层发送请求 ${callCount} 次...`);
-                    }
-
-                } catch (error) {
-                    printLog(`⚠️ 触发异常捕捉 (底层可能有安全防护或已崩溃): ${error.message}`);
-                    stopTest();
-                }
-            }, 1); 
-        }
-
-        // 停止压力测试
-        function stopTest() {
-            if (intervalId) {
-                clearInterval(intervalId);
-                intervalId = null;
-                printLog(`🛑 测试已安全停止。本次共计成功调用接口 ${callCount} 次。`);
-            }
-        }
-    </script>
 </body>
 </html>
