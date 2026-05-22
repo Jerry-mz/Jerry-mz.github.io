@@ -3,100 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>车载 IVI 系统接口安全审计</title>
+    <title>车机运行期软硬件资产核查工具</title>
     <style>
-        body { font-family: 'Courier New', Courier, monospace; background: #121212; color: #00ff00; padding: 20px; line-height: 1.5; }
-        h1 { color: #ffffff; border-bottom: 2px solid #00ff00; padding-bottom: 10px; font-size: 24px; }
-        .summary { color: #ffcc00; font-weight: bold; margin: 15px 0; font-size: 18px; }
-        .card { background: #1e1e1e; border: 1px solid #333; border-radius: 5px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .card-title { color: #ff4757; font-size: 20px; font-weight: bold; margin-bottom: 10px; }
-        .method-list { padding-left: 20px; color: #7bed9f; }
-        .method-item { margin: 5px 0; font-size: 14px; }
-        .no-found { color: #888; font-style: italic; }
+        body { background-color: #0f111a; color: #a6accd; font-family: monospace; padding: 25px; font-size: 14px; }
+        .section { background-color: #1a1c25; border: 1px solid #2f344d; border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+        .title { color: #82aaff; font-size: 16px; font-weight: bold; border-bottom: 1px solid #2f344d; padding-bottom: 8px; margin-bottom: 15px; }
+        .kv-row { display: flex; border-bottom: 1px dashed #232634; padding: 6px 0; }
+        .key { color: #c792ea; width: 250px; flex-shrink: 0; }
+        .val { color: #f07178; word-break: break-all; }
+        .bridge-card { background-color: #111219; border-left: 4px solid #c3e88d; padding: 10px; margin-top: 10px; }
+        .bridge-name { color: #c3e88d; font-weight: bold; font-size: 15px; }
+        .member-list { margin-left: 20px; padding-top: 5px; color: #89ddff; }
     </style>
 </head>
 <body>
 
-    <h1>[ 智能座舱 WebView 注入对象自动化审计平台 ]</h1>
-    <div id="summary" class="summary">正在深度扫描车机环境...</div>
-    <div id="container"></div>
+    <!-- 1. 底层硬件与沙箱资产核查 -->
+    <div class="section">
+        <div class="title">[ 1. 车机底层硬件与沙箱运行期参数 ]</div>
+        
+        <div class="kv-row">
+            <span class="key">User-Agent (内核版本):</span>
+            <span class="val" id="ua">-</span>
+        </div>
+        <div class="kv-row">
+            <span class="key">CPU 逻辑核心数:</span>
+            <span class="val" id="cpu">-</span>
+        </div>
+        <div class="kv-row">
+            <span class="key">GPU 硬件厂商 (真实):</span>
+            <span class="val" id="gpu-vendor">-</span>
+        </div>
+        <div class="kv-row">
+            <span class="key">GPU 渲染器型号 (解密芯片):</span>
+            <span class="val" id="gpu-renderer" style="color: #ffcb6b; font-weight: bold;">-</span>
+        </div>
+        <div class="kv-row">
+            <span class="key">V8 堆内存上限 (JS Heap Limit):</span>
+            <span class="val" id="js-memory">-</span>
+        </div>
+        <div class="kv-row">
+            <span class="key">屏幕分辨率与像素比:</span>
+            <span class="val" id="screen">-</span>
+        </div>
+    </div>
+
+    <!-- 2. 真实特权接口枚举与结构 Dump -->
+    <div class="section">
+        <div class="title">[ 2. 厂商非标准注入接口（JSBridge）在线 Dump ]</div>
+        <div id="bridge-container">正在扫描运行期全局对象...</div>
+    </div>
 
     <script>
-        function runBridgeAudit() {
-            const container = document.getElementById('container');
-            const summaryDiv = document.getElementById('summary');
+        // ======= 一、 真实底层硬件数据采集 =======
+        document.getElementById('ua').innerText = navigator.userAgent;
+        document.getElementById('cpu').innerText = `${navigator.hardwareConcurrency || '未知'} 核心`;
+        document.getElementById('screen').innerText = `${screen.width}x${screen.height} (DevicePixelRatio: ${window.devicePixelRatio})`;
+
+        // 真实 V8 内存限制采集
+        if (window.performance && performance.memory) {
+            const limitMB = Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024);
+            document.getElementById('js-memory').innerText = `${limitMB} MB`;
+        } else {
+            document.getElementById('js-memory').innerText = "无权限或不受 Chromium 内存审计支持";
+        }
+
+        // 利用 WebGL 穿透获取车机真实 GPU（通常能直接暴露车机芯片方案，如 Adreno 640/690 等）
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (gl) {
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                if (debugInfo) {
+                    document.getElementById('gpu-vendor').innerText = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                    document.getElementById('gpu-renderer').innerText = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                } else {
+                    document.getElementById('gpu-renderer').innerText = "无法获取未掩蔽的渲染器信息";
+                }
+            }
+        } catch (e) {
+            document.getElementById('gpu-renderer').innerText = "WebGL 硬件通道被车机禁用";
+        }
+
+
+        // ======= 二、 真实自定义 JSBridge 树状提取 =======
+        function dumpBridges() {
+            const container = document.getElementById('bridge-container');
             
-            // 1. 创建一个干净的对照组 iframe
+            // 创建对照组以剔除浏览器原生全局对象
             const iframe = document.createElement('iframe');
             iframe.style.display = 'none';
             document.body.appendChild(iframe);
             const cleanWindow = iframe.contentWindow;
 
-            const customBridges = [];
-
-            // 2. 差分遍历，剔除浏览器原生属性
+            const detectedBridges = [];
             for (let prop in window) {
                 try {
-                    // 如果当前 window 的属性在干净的 iframe 里不存在，说明是外来注入
                     if (!(prop in cleanWindow)) {
-                        customBridges.push(prop);
+                        detectedBridges.push(prop);
                     }
-                } catch (e) {
-                    // 忽略由于浏览器同源策略引发的个别权限报错
-                }
+                } catch(e) {}
             }
-
-            // 释放 iframe 内存
             document.body.removeChild(iframe);
 
-            // 3. 结果渲染
-            if (customBridges.length === 0) {
-                summaryDiv.innerHTML = "扫描完毕：未发现厂商显式注入的自定义全局对象。";
-                container.innerHTML = "<p class='no-found'>（注：可能该应用未使用 JSBridge，或接口未挂载在全局 window 下）</p>";
+            if (detectedBridges.length === 0) {
+                container.innerHTML = "<div style='color:#888;'>扫描完成：当前域的 window 对象下未发现任何非标准的厂商注入接口。</div>";
                 return;
             }
 
-            summaryDiv.innerHTML = `⚠️ 扫描完毕：在当前域中成功捕获到 ${customBridges.length} 个厂商特有注入对象！`;
-
-            customBridges.forEach(bridgeName => {
-                const bridgeObj = window[bridgeName];
-                
-                // 创建展示卡片
+            container.innerHTML = ""; // 清空提示
+            
+            detectedBridges.forEach(name => {
+                const obj = window[name];
                 const card = document.createElement('div');
-                card.className = 'card';
+                card.className = 'bridge-card';
                 
-                let html = `<div class="card-title">window.${bridgeName}</div>`;
-                html += `<div><strong>数据类型:</strong> ${typeof bridgeObj}</div>`;
-
-                // 4. 尝试深度枚举该注入对象内部的方法和属性
-                if (bridgeObj && (typeof bridgeObj === 'object' || typeof bridgeObj === 'function')) {
-                    html += `<div style="margin-top:10px; color:#aaa;">探测到内部成员：</div>`;
-                    html += `<ul class="method-list">`;
-                    
+                let html = `<div class="bridge-name">window.${name} [类型: ${typeof obj}]</div>`;
+                
+                // 深度提取内部结构
+                if (obj && (typeof obj === 'object' || typeof obj === 'function')) {
+                    html += `<div class="member-list">`;
                     let hasMembers = false;
-                    for (let member in bridgeObj) {
+                    
+                    for (let member in obj) {
                         hasMembers = true;
                         try {
-                            const memberType = typeof bridgeObj[member];
-                            html += `<li class="method-item">• .${member} <span style="color:#54a0ff;">(${memberType})</span></li>`;
-                        } catch (err) {
-                            html += `<li class="method-item">• .${member} <span style="color:#ff6b6b;">(无法读取权限)</span></li>`;
+                            const memberType = typeof obj[member];
+                            // 如果是方法，尝试提取出它的参数特征或内容
+                            html += `<div>├── .${member} : <span style="color:#f78c6c;">${memberType}</span></div>`;
+                        } catch(err) {
+                            html += `<div>├── .${member} : <span style="color:#ff5370;">[无读取权限]</span></div>`;
                         }
                     }
-                    
                     if (!hasMembers) {
-                        html += `<li class="no-found">该对象下无公开子成员，或所有成员已被混淆不可见。</li>`;
+                        html += `<div>└── [空对象/无公开可遍历数组成员]</div>`;
                     }
-                    html += `</ul>`;
+                    html += `</div>`;
                 }
-
+                
                 card.innerHTML = html;
                 container.appendChild(card);
             });
         }
 
-        // 延迟 1 秒执行，防止部分车机应用的原生注入动作慢于前端页面渲染
-        setTimeout(runBridgeAudit, 1000);
+        // 延迟执行等待厂商底层注入就绪
+        setTimeout(dumpBridges, 800);
     </script>
 </body>
 </html>
