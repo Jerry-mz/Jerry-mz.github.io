@@ -17,7 +17,7 @@
 <body>
 
     <h2>车机系统界面接口压测</h2>
-    <p style="color: #666; font-size: 14px;">测试 window.HwebViewJSI 的抗压与防刷能力</p>
+    <p style="color: #666; font-size: 14px;">测试 window.HwWebViewJSI 的抗压与防刷能力</p>
 
     <div class="card">
         <button class="btn-danger" onclick="startTest('adjust')">💥 狂刷 adjustWebviewsize</button>
@@ -44,8 +44,8 @@
             }
 
             // 1. 检查全局对象是否存在
-            if (typeof window.HwebViewJSI === 'undefined') {
-                printLog("❌ 错误：当前环境未检测到 window.HwebViewJSI 对象！");
+            if (typeof window.HwWebViewJSI === 'undefined') {
+                printLog("❌ 错误：当前环境未检测到 window.HwWebViewJSI 对象！");
                 return;
             }
 
@@ -56,21 +56,21 @@
             intervalId = setInterval(() => {
                 try {
                     if (type === 'adjust') {
-                        if (typeof window.HwebViewJSI.adjustWebviewsize === 'function') {
+                        if (typeof window.HwWebViewJSI.adjustWebviewsize === 'function') {
                             // 构造交替的尺寸，强迫底层 WebView 频繁重绘
                             let mockWidth = callCount % 2 === 0 ? 100 : 1920;
                             let mockHeight = callCount % 2 === 0 ? 100 : 1080;
                             
                             // 猜测常见入参：width, height（若原函数不带参，JS会自动忽略额外参数）
-                            window.HwebViewJSI.adjustWebviewsize(mockWidth, mockHeight);
+                            window.HwWebViewJSI.adjustWebviewsize(mockWidth, mockHeight);
                         } else {
                             printLog("❌ 接口未激活或 adjustWebviewsize 不是函数");
                             stopTest();
                         }
                     } 
                     else if (type === 'relayout') {
-                        if (typeof window.HwebViewJSI.relayoutHappen === 'function') {
-                            window.HwebViewJSI.relayoutHappen();
+                        if (typeof window.HwWebViewJSI.relayoutHappen === 'function') {
+                            window.HwWebViewJSI.relayoutHappen();
                         } else {
                             printLog("❌ 接口未激活或 relayoutHappen 不是函数");
                             stopTest();
