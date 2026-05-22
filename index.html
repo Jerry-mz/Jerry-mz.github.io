@@ -3,151 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>车机运行期软硬件资产核查工具</title>
+    <title>基础文件测试接口</title>
     <style>
-        body { background-color: #0f111a; color: #a6accd; font-family: monospace; padding: 25px; font-size: 14px; }
-        .section { background-color: #1a1c25; border: 1px solid #2f344d; border-radius: 6px; padding: 20px; margin-bottom: 20px; }
-        .title { color: #82aaff; font-size: 16px; font-weight: bold; border-bottom: 1px solid #2f344d; padding-bottom: 8px; margin-bottom: 15px; }
-        .kv-row { display: flex; border-bottom: 1px dashed #232634; padding: 6px 0; }
-        .key { color: #c792ea; width: 250px; flex-shrink: 0; }
-        .val { color: #f07178; word-break: break-all; }
-        .bridge-card { background-color: #111219; border-left: 4px solid #c3e88d; padding: 10px; margin-top: 10px; }
-        .bridge-name { color: #c3e88d; font-weight: bold; font-size: 15px; }
-        .member-list { margin-left: 20px; padding-top: 5px; color: #89ddff; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            background-color: #f5f5f7; 
+            margin: 0; 
+        }
+        .container { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
+            text-align: center; 
+        }
+        .btn { 
+            display: inline-block; 
+            min-width: 160px;
+            padding: 14px 28px; 
+            margin: 15px; 
+            font-size: 16px; 
+            font-weight: 600; 
+            color: white; 
+            background-color: #0071e3; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            text-decoration: none; 
+            transition: background 0.2s;
+        }
+        .btn:hover { background-color: #0077ed; }
+        .btn-download { background-color: #34c759; }
+        .btn-download:hover { background-color: #30b651; }
+        input[type="file"] { display: none; }
     </style>
 </head>
 <body>
 
-    <!-- 1. 底层硬件与沙箱资产核查 -->
-    <div class="section">
-        <div class="title">[ 1. 车机底层硬件与沙箱运行期参数 ]</div>
-        
-        <div class="kv-row">
-            <span class="key">User-Agent (内核版本):</span>
-            <span class="val" id="ua">-</span>
-        </div>
-        <div class="kv-row">
-            <span class="key">CPU 逻辑核心数:</span>
-            <span class="val" id="cpu">-</span>
-        </div>
-        <div class="kv-row">
-            <span class="key">GPU 硬件厂商 (真实):</span>
-            <span class="val" id="gpu-vendor">-</span>
-        </div>
-        <div class="kv-row">
-            <span class="key">GPU 渲染器型号 (解密芯片):</span>
-            <span class="val" id="gpu-renderer" style="color: #ffcb6b; font-weight: bold;">-</span>
-        </div>
-        <div class="kv-row">
-            <span class="key">V8 堆内存上限 (JS Heap Limit):</span>
-            <span class="val" id="js-memory">-</span>
-        </div>
-        <div class="kv-row">
-            <span class="key">屏幕分辨率与像素比:</span>
-            <span class="val" id="screen">-</span>
-        </div>
+    <div class="container">
+        <!-- 1. 上传按钮（触发电脑本地文件选择框） -->
+        <label class="btn">
+            上传文件
+            <input type="file" onchange="alert('已选中文件: ' + this.files[0].name + '\n本地前端捕获成功！')">
+        </label>
+
+        <!-- 2. 下载按钮（直接下载一个纯文本测试文件） -->
+        <a href="data:text/plain;charset=utf-8,SUCCESS%3A%20File%20download%20works%20perfectly." 
+           download="车机下载测试.txt" 
+           class="btn btn-download">
+            下载文件
+        </a>
     </div>
 
-    <!-- 2. 真实特权接口枚举与结构 Dump -->
-    <div class="section">
-        <div class="title">[ 2. 厂商非标准注入接口（JSBridge）在线 Dump ]</div>
-        <div id="bridge-container">正在扫描运行期全局对象...</div>
-    </div>
-
-    <script>
-        // ======= 一、 真实底层硬件数据采集 =======
-        document.getElementById('ua').innerText = navigator.userAgent;
-        document.getElementById('cpu').innerText = `${navigator.hardwareConcurrency || '未知'} 核心`;
-        document.getElementById('screen').innerText = `${screen.width}x${screen.height} (DevicePixelRatio: ${window.devicePixelRatio})`;
-
-        // 真实 V8 内存限制采集
-        if (window.performance && performance.memory) {
-            const limitMB = Math.round(performance.memory.jsHeapSizeLimit / 1024 / 1024);
-            document.getElementById('js-memory').innerText = `${limitMB} MB`;
-        } else {
-            document.getElementById('js-memory').innerText = "无权限或不受 Chromium 内存审计支持";
-        }
-
-        // 利用 WebGL 穿透获取车机真实 GPU（通常能直接暴露车机芯片方案，如 Adreno 640/690 等）
-        try {
-            const canvas = document.createElement('canvas');
-            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-            if (gl) {
-                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                if (debugInfo) {
-                    document.getElementById('gpu-vendor').innerText = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
-                    document.getElementById('gpu-renderer').innerText = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-                } else {
-                    document.getElementById('gpu-renderer').innerText = "无法获取未掩蔽的渲染器信息";
-                }
-            }
-        } catch (e) {
-            document.getElementById('gpu-renderer').innerText = "WebGL 硬件通道被车机禁用";
-        }
-
-
-        // ======= 二、 真实自定义 JSBridge 树状提取 =======
-        function dumpBridges() {
-            const container = document.getElementById('bridge-container');
-            
-            // 创建对照组以剔除浏览器原生全局对象
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            document.body.appendChild(iframe);
-            const cleanWindow = iframe.contentWindow;
-
-            const detectedBridges = [];
-            for (let prop in window) {
-                try {
-                    if (!(prop in cleanWindow)) {
-                        detectedBridges.push(prop);
-                    }
-                } catch(e) {}
-            }
-            document.body.removeChild(iframe);
-
-            if (detectedBridges.length === 0) {
-                container.innerHTML = "<div style='color:#888;'>扫描完成：当前域的 window 对象下未发现任何非标准的厂商注入接口。</div>";
-                return;
-            }
-
-            container.innerHTML = ""; // 清空提示
-            
-            detectedBridges.forEach(name => {
-                const obj = window[name];
-                const card = document.createElement('div');
-                card.className = 'bridge-card';
-                
-                let html = `<div class="bridge-name">window.${name} [类型: ${typeof obj}]</div>`;
-                
-                // 深度提取内部结构
-                if (obj && (typeof obj === 'object' || typeof obj === 'function')) {
-                    html += `<div class="member-list">`;
-                    let hasMembers = false;
-                    
-                    for (let member in obj) {
-                        hasMembers = true;
-                        try {
-                            const memberType = typeof obj[member];
-                            // 如果是方法，尝试提取出它的参数特征或内容
-                            html += `<div>├── .${member} : <span style="color:#f78c6c;">${memberType}</span></div>`;
-                        } catch(err) {
-                            html += `<div>├── .${member} : <span style="color:#ff5370;">[无读取权限]</span></div>`;
-                        }
-                    }
-                    if (!hasMembers) {
-                        html += `<div>└── [空对象/无公开可遍历数组成员]</div>`;
-                    }
-                    html += `</div>`;
-                }
-                
-                card.innerHTML = html;
-                container.appendChild(card);
-            });
-        }
-
-        // 延迟执行等待厂商底层注入就绪
-        setTimeout(dumpBridges, 800);
-    </script>
 </body>
 </html>
