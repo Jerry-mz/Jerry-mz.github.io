@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>车载 IVI 系统接口安全审计</title>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; background: #121212; color: #00ff00; padding: 20px; line-height: 1.5; }
+        h1 { color: #ffffff; border-bottom: 2px solid #00ff00; padding-bottom: 10px; font-size: 24px; }
+        .summary { color: #ffcc00; font-weight: bold; margin: 15px 0; font-size: 18px; }
+        .card { background: #1e1e1e; border: 1px solid #333; border-radius: 5px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .card-title { color: #ff4757; font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+        .method-list { padding-left: 20px; color: #7bed9f; }
+        .method-item { margin: 5px 0; font-size: 14px; }
+        .no-found { color: #888; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <h1>[ 智能座舱 WebView 注入对象自动化审计平台 ]</h1>
+    <div id="summary" class="summary">正在深度扫描车机环境...</div>
+    <div id="container"></div>
+
+    <script>
+        function runBridgeAudit() {
+            const container = document.getElementById('container');
+            const summaryDiv = document.getElementById('summary');
+            
+            // 1. 创建一个干净的对照组 iframe
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            const cleanWindow = iframe.contentWindow;
+
+            const customBridges = [];
+
+            // 2. 差分遍历，剔除浏览器原生属性
+            for (let prop in window) {
+                try {
+                    // 如果当前 window 的属性在干净的 iframe 里不存在，说明是外来注入
+                    if (!(prop in cleanWindow)) {
+                        customBridges.push(prop);
+                    }
+                } catch (e) {
+                    // 忽略由于浏览器同源策略引发的个别权限报错
+                }
+            }
+
+            // 释放 iframe 内存
+            document.body.removeChild(iframe);
+
+            // 3. 结果渲染
+            if (customBridges.length === 0) {
+                summaryDiv.innerHTML = "扫描完毕：未发现厂商显式注入的自定义全局对象。";
+                container.innerHTML = "<p class='no-found'>（注：可能该应用未使用 JSBridge，或接口未挂载在全局 window 下）</p>";
+                return;
+            }
+
+            summaryDiv.innerHTML = `⚠️ 扫描完毕：在当前域中成功捕获到 ${customBridges.length} 个厂商特有注入对象！`;
+
+            customBridges.forEach(bridgeName => {
+                const bridgeObj = window[bridgeName];
+                
+                // 创建展示卡片
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                let html = `<div class="card-title">window.${bridgeName}</div>`;
+                html += `<div><strong>数据类型:</strong> ${typeof bridgeObj}</div>`;
+
+                // 4. 尝试深度枚举该注入对象内部的方法和属性
+                if (bridgeObj && (typeof bridgeObj === 'object' || typeof bridgeObj === 'function')) {
+                    html += `<div style="margin-top:10px; color:#aaa;">探测到内部成员：</div>`;
+                    html += `<ul class="method-list">`;
+                    
+                    let hasMembers = false;
+                    for (let member in bridgeObj) {
+                        hasMembers = true;
+                        try {
+                            const memberType = typeof bridgeObj[member];
+                            html += `<li class="method-item">• .${member} <span style="color:#54a0ff;">(${memberType})</span></li>`;
+                        } catch (err) {
+                            html += `<li class="method-item">• .${member} <span style="color:#ff6b6b;">(无法读取权限)</span></li>`;
+                        }
+                    }
+                    
+                    if (!hasMembers) {
+                        html += `<li class="no-found">该对象下无公开子成员，或所有成员已被混淆不可见。</li>`;
+                    }
+                    html += `</ul>`;
+                }
+
+                card.innerHTML = html;
+                container.appendChild(card);
+            });
+        }
+
+        // 延迟 1 秒执行，防止部分车机应用的原生注入动作慢于前端页面渲染
+        setTimeout(runBridgeAudit, 1000);
+    </script>
+</body>
+</html>
